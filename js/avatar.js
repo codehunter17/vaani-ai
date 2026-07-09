@@ -94,15 +94,21 @@ export async function initVRMAvatar(url) {
     scene.add(vrm.scene);
     vrm.scene.updateMatrixWorld(true);
 
-    /* Frame head → neck only */
+    /* Frame head to neck using the model's real bounding box —
+       bone distances vary wildly between VRM models, but
+       "neck to crown of the bounding box" is reliable. */
     const headBone = vrm.humanoid.getNormalizedBoneNode("head");
     const neckBone = vrm.humanoid.getNormalizedBoneNode("neck") || headBone;
     const hp = new THREE.Vector3(); headBone.getWorldPosition(hp);
     const np = new THREE.Vector3(); neckBone.getWorldPosition(np);
-    const span = Math.max(hp.y - np.y, 0.07);          // head height proxy
-    const face = hp.clone(); face.y += span * 0.45;    // eye-line
-    camera.position.set(face.x, face.y, face.z + span * 4.6);
-    camera.lookAt(face.x, face.y - span * 0.15, face.z);
+    const box = new THREE.Box3().setFromObject(vrm.scene);
+    const crownY = box.max.y;                              // top of the head incl. hair
+    const bodyH = Math.max(box.max.y - box.min.y, 0.5);
+    const frameH = Math.max(crownY - np.y, bodyH * 0.12) * 1.35;  // neck→crown + margin
+    const cy = (crownY + np.y) / 2;                        // vertical centre of the head
+    const dist = (frameH / 2) / Math.tan((camera.fov * Math.PI / 180) / 2);
+    camera.position.set(hp.x, cy, hp.z + dist);
+    camera.lookAt(hp.x, cy, hp.z);
 
     /* Swap: hide vector face, show 3D head */
     renderer.domElement.style.cssText = "width:100%;height:100%;display:block";
