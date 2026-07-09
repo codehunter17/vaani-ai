@@ -6,7 +6,7 @@
 
 import { HARDCODED_API_KEY } from "./config.js";
 import { violatesInputGuardrail, violatesOutputGuardrail, REFUSAL_LINE } from "./guardrails.js";
-import { setState } from "./avatar.js";
+import { setState, initVRMAvatar } from "./avatar.js";
 import { initSTT, startListening, stopListening, isListening, sttSupported } from "./stt.js";
 import { beginUtterance, enqueue, endOfStream, cancelSpeech, isSpeaking } from "./tts.js";
 import { askGeminiStream, preflight } from "./llm.js";
@@ -71,6 +71,20 @@ $("keySave").onclick = () => {
 };
 
 /* ---------------- STT wiring ---------------- */
+/* Load the 3D head in the background; the vector avatar shows
+   instantly and stays if the model can't load. */
+initVRMAvatar("assets/model.vrm");
+
+const MIC_ERRORS = {
+  "not-allowed": "Microphone blocked — tap the lock icon in the address bar → Permissions → allow Microphone",
+  "service-not-allowed": "Speech service blocked by the browser — check site permissions",
+  "no-speech": "Didn't catch that — tap the mic and try again",
+  "audio-capture": "No microphone found on this device",
+  "network": "Speech service unreachable — check your internet connection",
+  "busy-retry": "Mic was busy — tap once more",
+  "aborted": "",
+};
+
 initSTT({
   onStart: () => {
     micBtn.classList.add("listening");
@@ -82,9 +96,8 @@ initSTT({
   onError: (err) => {
     micBtn.classList.remove("listening");
     setState("idle");
-    if (err === "not-allowed") setStatus("Microphone permission needed — allow mic access and retry", "err");
-    else if (err === "no-speech") setStatus("Didn't catch that — tap the mic and try again");
-    else setStatus("Mic error: " + err, "err");
+    const msg = MIC_ERRORS[err] !== undefined ? MIC_ERRORS[err] : "Mic error: " + err;
+    if (msg) setStatus(msg, err === "no-speech" || err === "busy-retry" ? "" : "err");
   },
   onEnd: () => {
     micBtn.classList.remove("listening");

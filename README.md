@@ -74,7 +74,7 @@ No frameworks, no build step, no backend — plain ES modules on static hosting.
 | STT | Web Speech API | Free, on-device (privacy + speed), instant partial results |
 | LLM + live web | Gemini 2.5 Flash + Google Search grounding | One call does reasoning **and** real-time retrieval; fast Flash tier; free quota |
 | TTS | SpeechSynthesis (`en-IN` voice) | Instant first audio, no second network hop |
-| Avatar | SVG viseme lip-sync | Dependency-free now; drop-in upgrade path to photoreal WebRTC avatars (D-ID / HeyGen / MuseTalk) — see the one-pager report |
+| Avatar | VRM 3D head (three.js + three-vrm) with SVG fallback | Real humanoid model, lip-synced via its own 'aa' viseme blendshape, blinking + idle motion; vector fallback if WebGL/model unavailable |
 
 ## What else is in the box
 
