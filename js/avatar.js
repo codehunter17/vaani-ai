@@ -104,8 +104,8 @@ export async function initVRMAvatar(url) {
     const box = new THREE.Box3().setFromObject(vrm.scene);
     const crownY = box.max.y;                              // top of the head incl. hair
     const bodyH = Math.max(box.max.y - box.min.y, 0.5);
-    const frameH = Math.max(crownY - np.y, bodyH * 0.12) * 1.35;  // neck→crown + margin
-    const cy = (crownY + np.y) / 2;                        // vertical centre of the head
+    const frameH = Math.max(crownY - np.y, bodyH * 0.12) * 1.12;  // chin→crown incl. hair
+    const cy = (crownY + np.y) / 2 + (crownY - np.y) * 0.03;      // centre on the face
     const dist = (frameH / 2) / Math.tan((camera.fov * Math.PI / 180) / 2);
     camera.position.set(hp.x, cy, hp.z + dist);
     camera.lookAt(hp.x, cy, hp.z);
