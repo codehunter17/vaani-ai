@@ -81,7 +81,9 @@ initVRMAvatar("assets/model.vrm").then((ok) => {
 });
 
 const MIC_ERRORS = {
-  "not-allowed": "Microphone blocked — allow it for Chrome: Android Settings → Apps → Chrome → Permissions → Microphone, and the lock icon in the address bar",
+  "not-allowed": "Microphone blocked — tap the lock icon in the address bar → Permissions → Microphone → Allow, then reload",
+  "not-allowed-site": "This SITE is set to Block in Chrome — tap the lock icon in the address bar → Permissions → Microphone → Allow (or Reset), then RELOAD the page",
+  "not-allowed-os": "Chrome has site permission, but Android is blocking the mic — check Quick Settings mic toggle and Settings → Apps → Chrome → Permissions → Microphone",
   "service-not-allowed": "Speech service blocked — check Chrome's site permissions",
   "no-speech": "Didn't catch that — tap the mic and try again",
   "audio-capture": "No microphone found on this device",

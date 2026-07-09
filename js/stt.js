@@ -38,10 +38,18 @@ export async function startListening() {
     }
   } catch (err) {
     starting = false;
-    const code =
+    let code =
       err.name === "NotAllowedError" ? "not-allowed" :
       err.name === "NotFoundError"   ? "audio-capture" :
       err.name === "NotReadableError" ? "mic-busy" : (err.name || "mic-failed");
+    /* Distinguish WHERE the block is: browser site-setting vs OS */
+    if (code === "not-allowed" && navigator.permissions && navigator.permissions.query) {
+      try {
+        const p = await navigator.permissions.query({ name: "microphone" });
+        if (p.state === "denied") code = "not-allowed-site";
+        else if (p.state === "granted") code = "not-allowed-os";
+      } catch (_) {}
+    }
     callbacks.onError(code);
     return;
   }
