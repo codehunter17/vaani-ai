@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="VaaniAI — voice assistant that fetches live answers from the internet and speaks them through a lip-synced avatar, with layered safety guardrails.">
+<title>VaaniAI — Voice Assistant with Live Web Answers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0B0E1A">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%230B0E1A'/%3E%3Cpath d='M30 35 L50 72 L70 35' stroke='%23F2A93B' stroke-width='11' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">Vaani<span>AI</span></div>
+    <div class="tag">Speak · Fetch · Answer</div>
+  </div>
+  <div class="pill" id="pipelinePill" title="Live pipeline stage">idle</div>
+</header>
+
+<!-- API key entry (hidden when a key is hardcoded in js/config.js) -->
+<section class="keybar" id="keybar">
+  <input id="keyInput" type="password" placeholder="Paste your Gemini API key" autocomplete="off" aria-label="Gemini API key">
+  <button id="keySave">Start</button>
+</section>
+<p class="keynote" id="keynote">
+  Free key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>. The key stays in this page's memory only — it is never stored or sent anywhere except Google's API.
+</p>
+
+<!-- Avatar stage -->
+<section class="stage" id="stage" aria-label="Assistant avatar">
+  <div class="pulse-ring"></div>
+  <div class="pulse-ring"></div>
+  <div class="pulse-ring"></div>
+  <div class="avatar-disc">
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <path d="M42 96 Q38 30 100 26 Q162 30 158 96 L158 150 Q140 132 138 100 L62 100 Q60 132 42 150 Z" fill="#2A2138"/>
+      <rect x="86" y="140" width="28" height="26" rx="10" fill="#C68B59"/>
+      <path d="M40 200 Q46 158 100 158 Q154 158 160 200 Z" fill="#F2A93B"/>
+      <path d="M40 200 Q46 158 100 158 Q154 158 160 200 Z" fill="rgba(0,0,0,.18)" transform="translate(0,3)"/>
+      <ellipse cx="100" cy="98" rx="42" ry="48" fill="#D99A66"/>
+      <ellipse cx="100" cy="98" rx="42" ry="48" fill="rgba(255,255,255,.05)"/>
+      <ellipse cx="57" cy="102" rx="7" ry="10" fill="#C68B59"/>
+      <ellipse cx="143" cy="102" rx="7" ry="10" fill="#C68B59"/>
+      <path d="M56 84 Q60 40 100 38 Q140 40 144 84 Q128 66 100 66 Q72 66 56 84 Z" fill="#2A2138"/>
+      <path d="M74 84 Q82 79 92 83" stroke="#3A2C22" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+      <path d="M108 83 Q118 79 126 84" stroke="#3A2C22" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+      <g class="eye left"><ellipse cx="83" cy="95" rx="6.4" ry="7.6" fill="#FFF"/><circle cx="83.5" cy="96" r="3.6" fill="#33241C"/><circle cx="85" cy="94.4" r="1.1" fill="#FFF"/></g>
+      <g class="eye right"><ellipse cx="117" cy="95" rx="6.4" ry="7.6" fill="#FFF"/><circle cx="117.5" cy="96" r="3.6" fill="#33241C"/><circle cx="119" cy="94.4" r="1.1" fill="#FFF"/></g>
+      <path d="M100 100 Q97 110 100 114 Q103 112 104 111" stroke="#B97C4C" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      <circle cx="100" cy="78" r="2.4" fill="#E4572E"/>
+      <path id="mouth" d="M86 126 Q100 132 114 126 Q100 134 86 126 Z" fill="#8C3B2E"/>
+      <circle cx="57" cy="113" r="2.6" fill="#F2A93B"/>
+      <circle cx="143" cy="113" r="2.6" fill="#F2A93B"/>
+    </svg>
+  </div>
+</section>
+
+<p class="status" id="status">Paste your API key to begin</p>
+
+<section class="micwrap">
+  <button id="micBtn" aria-label="Tap to speak" disabled>
+    <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11z"/></svg>
+  </button>
+  <div class="michint" id="michint">Tap the mic and ask anything</div>
+  <button id="stopSpeak" class="ghost hidden">Stop speaking</button>
+</section>
+
+<!-- One-tap demo queries -->
+<section class="chips" id="chips">
+  <button class="chip">What is the weather in Hyderabad?</button>
+  <button class="chip">Latest news headlines from India</button>
+  <button class="chip">USD to INR exchange rate today</button>
+</section>
+
+<section class="log" id="log" aria-live="polite"></section>
+
+<!-- Typed fallback: works even in browsers without speech recognition -->
+<div class="askbar" id="askbar">
+  <input id="askInput" type="text" placeholder="Or type your question…" autocomplete="off" aria-label="Type a question" disabled>
+  <button id="askSend" type="button" aria-label="Send" disabled>
+    <svg viewBox="0 0 24 24"><path d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+  </button>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
