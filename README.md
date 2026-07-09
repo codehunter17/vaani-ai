@@ -10,8 +10,12 @@ queries.
 ## Quick start (2 minutes)
 
 1. Get a free Gemini API key → https://aistudio.google.com/apikey
-2. Paste it in `js/config.js` → `HARDCODED_API_KEY = "your-key"`
-   (or leave it empty and paste the key in the UI at runtime)
+2. Give the app the key in any ONE of three ways:
+   - **Demo link (recommended for sharing):** append it to the URL —
+     `https://your-host/vaani-ai/#key=AIza...` — the key never enters the
+     public repo, but anyone with the link gets a zero-setup demo
+   - Paste it in the key box shown in the UI at runtime
+   - Or hardcode it in `js/config.js` (only for private deployments)
 3. Host the folder anywhere static — GitHub Pages, Netlify Drop, Vercel.
    *Note: the mic requires HTTPS, so open the hosted URL, not the local file.*
 4. Open in Chrome/Edge, allow microphone, tap the mic and ask.

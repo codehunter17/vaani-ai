@@ -16,8 +16,16 @@ const status_ = $("status"), micBtn = $("micBtn"), log = $("log"),
       stopBtn = $("stopSpeak"), michint = $("michint"),
       askInput = $("askInput"), askSend = $("askSend");
 
-let apiKey = HARDCODED_API_KEY;
+let apiKey = keyFromUrl() || HARDCODED_API_KEY;
 let busy = false;
+
+/* Demo-link pattern: append #key=YOUR_KEY to the URL to preload
+   the API key without ever committing it to the public repo.
+   Example: https://yoursite.github.io/vaani-ai/#key=AIza...     */
+function keyFromUrl() {
+  const m = location.hash.match(/key=([^&\s]+)/);
+  return m ? decodeURIComponent(m[1]) : "";
+}
 
 /* ---------------- UI helpers ---------------- */
 function setStatus(msg, cls) {
