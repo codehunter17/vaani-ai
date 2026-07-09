@@ -72,8 +72,13 @@ $("keySave").onclick = () => {
 
 /* ---------------- STT wiring ---------------- */
 /* Load the 3D head in the background; the vector avatar shows
-   instantly and stays if the model can't load. */
-initVRMAvatar("assets/model.vrm");
+   instantly and stays if the model can't load. Open the app with
+   #debug in the URL to see avatar-load errors on screen. */
+initVRMAvatar("assets/model.vrm").then((ok) => {
+  if (window.location.hash.includes("debug")) {
+    setStatus(ok ? "3D avatar loaded" : "3D avatar failed — see console; vector fallback active", ok ? "live" : "err");
+  }
+});
 
 const MIC_ERRORS = {
   "not-allowed": "Microphone blocked — tap the lock icon in the address bar → Permissions → allow Microphone",
