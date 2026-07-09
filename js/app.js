@@ -81,32 +81,41 @@ initVRMAvatar("assets/model.vrm").then((ok) => {
 });
 
 const MIC_ERRORS = {
-  "not-allowed": "Microphone blocked — tap the lock icon in the address bar → Permissions → allow Microphone",
-  "service-not-allowed": "Speech service blocked by the browser — check site permissions",
+  "not-allowed": "Microphone blocked — allow it for Chrome: Android Settings → Apps → Chrome → Permissions → Microphone, and the lock icon in the address bar",
+  "service-not-allowed": "Speech service blocked — check Chrome's site permissions",
   "no-speech": "Didn't catch that — tap the mic and try again",
   "audio-capture": "No microphone found on this device",
-  "network": "Speech service unreachable — check your internet connection",
+  "mic-busy": "Microphone is in use by another app — close it and retry",
+  "network": "Speech service unreachable — Android's speech recognition needs the Google app enabled and internet access",
   "busy-retry": "Mic was busy — tap once more",
-  "aborted": "",
+  "aborted": "Mic was interrupted — tap to try again",
 };
+
+let micGotResult = false;
 
 initSTT({
   onStart: () => {
+    micGotResult = false;
     micBtn.classList.add("listening");
     setState("listening");
     setStatus("Listening…", "live");
   },
-  onInterim: (t) => setStatus("\u201C" + t + "\u201D", "live"),
-  onFinal: (t) => handleQuery(t),
+  onInterim: (t) => { micGotResult = true; setStatus("\u201C" + t + "\u201D", "live"); },
+  onFinal: (t) => { micGotResult = true; handleQuery(t); },
   onError: (err) => {
     micBtn.classList.remove("listening");
     setState("idle");
     const msg = MIC_ERRORS[err] !== undefined ? MIC_ERRORS[err] : "Mic error: " + err;
     if (msg) setStatus(msg, err === "no-speech" || err === "busy-retry" ? "" : "err");
   },
-  onEnd: () => {
+  onEnd: (reason) => {
     micBtn.classList.remove("listening");
     if (!busy && !isSpeaking()) setState("idle");
+    /* the mic closed without hearing anything and without a mapped
+       error — say so instead of leaving a stale "Listening…" */
+    if (!micGotResult && !reason && !busy) {
+      setStatus("Mic closed without capturing audio — if this repeats, check Android Settings → Apps → Chrome → Permissions → Microphone, and the mic toggle in Quick Settings", "err");
+    }
   },
 });
 
