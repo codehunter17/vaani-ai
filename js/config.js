@@ -13,8 +13,18 @@ export const MODEL = "gemini-2.5-flash";
 
 /* Streaming endpoint (SSE) — lets TTS start speaking the first
    sentence while the rest of the answer is still generating. */
-export const STREAM_URL = (key) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse&key=${key}`;
+const BASE = "https://generativelanguage.googleapis.com/v1beta";
+
+export const STREAM_URL = (key) => `${BASE}/models/${MODEL}:streamGenerateContent?alt=sse&key=${key}`;
+
+/* Non-streaming fallback for networks that stall SSE responses */
+export const ONCE_URL = (key) => `${BASE}/models/${MODEL}:generateContent?key=${key}`;
+
+/* Cheap metadata call used as a connectivity/key preflight check */
+export const PING_URL = (key) => `${BASE}/models?pageSize=1&key=${key}`;
+
+/* Abort a hung request after this long */
+export const REQUEST_TIMEOUT_MS = 30000;
 
 export const SYSTEM_PROMPT = `You are Vaani, a friendly Indian voice assistant. Your answers are SPOKEN aloud, so:
 - Reply in 2 to 4 short conversational sentences. No markdown, no bullet points, no asterisks, no emojis.

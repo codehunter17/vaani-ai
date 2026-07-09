@@ -9,7 +9,7 @@ import { violatesInputGuardrail, violatesOutputGuardrail, REFUSAL_LINE } from ".
 import { setState } from "./avatar.js";
 import { initSTT, startListening, stopListening, isListening, sttSupported } from "./stt.js";
 import { beginUtterance, enqueue, endOfStream, cancelSpeech, isSpeaking } from "./tts.js";
-import { askGeminiStream } from "./llm.js";
+import { askGeminiStream, preflight } from "./llm.js";
 
 const $ = (id) => document.getElementById(id);
 const status_ = $("status"), micBtn = $("micBtn"), log = $("log"),
@@ -56,6 +56,11 @@ function enableApp() {
   if (!log.querySelector(".bubble")) {
     addBubble("Namaste! I'm Vaani. Ask me anything — weather, news, prices — and I'll fetch a live answer and speak it to you.", "bot");
   }
+  /* Preflight: verify key + connectivity so problems are visible
+     immediately instead of a silent hang on the first question. */
+  preflight(apiKey).then((r) => {
+    if (!r.ok) setStatus("Setup problem: " + r.msg, "err");
+  });
 }
 if (apiKey) enableApp();
 $("keySave").onclick = () => {
@@ -178,11 +183,12 @@ async function handleQuery(text) {
     }
   } catch (err) {
     botBubble.remove();
-    const msg = "Sorry, I couldn't reach the answer service. Please check your internet or API key and try again.";
+    const detail = String(err.message || err).slice(0, 160);
+    const msg = "Sorry, I couldn't get the answer. " + detail;
     addBubble(msg, "bot", true);
-    setStatus(String(err.message || err).slice(0, 120), "err");
+    setStatus(detail, "err");
     beginUtterance(() => setStatus("Tap the mic to try again"));
-    enqueue(msg);
+    enqueue("Sorry, I couldn't get the answer. Please try again.");
     endOfStream();
   } finally {
     busy = false;

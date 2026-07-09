@@ -7,9 +7,33 @@
    ============================================================ */
 
 import {
-  STREAM_URL, SYSTEM_PROMPT, HISTORY_LIMIT,
+  STREAM_URL, ONCE_URL, PING_URL, REQUEST_TIMEOUT_MS,
+  SYSTEM_PROMPT, HISTORY_LIMIT,
   GENERATION_CONFIG, SAFETY_SETTINGS,
 } from "./config.js";
+
+/* Preflight: verify key + connectivity with a cheap metadata GET.
+   Returns { ok, msg }. */
+export async function preflight(apiKey) {
+  try {
+    const res = await fetch(PING_URL(apiKey), { signal: timeoutSignal(10000) });
+    if (res.ok) return { ok: true, msg: "" };
+    let msg = "HTTP " + res.status;
+    try { msg = (await res.json()).error?.message || msg; } catch (_) {}
+    return { ok: false, msg };
+  } catch (err) {
+    return { ok: false, msg: err.name === "AbortError"
+      ? "Cannot reach Google's API — network may be blocking googleapis.com"
+      : String(err.message || err) };
+  }
+}
+
+function timeoutSignal(ms) {
+  if (AbortSignal.timeout) return AbortSignal.timeout(ms);
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+}
 
 let history = [];
 
@@ -48,44 +72,71 @@ function drainSentences(buffer) {
  * onSentence(s)  — called for each complete sentence as it forms
  * Returns { fullText, blocked }.
  */
-export async function askGeminiStream(apiKey, userText, onSentence) {
-  history.push({ role: "user", parts: [{ text: userText }] });
-  if (history.length > HISTORY_LIMIT) history = history.slice(-HISTORY_LIMIT);
-
-  const body = {
+function buildBody() {
+  return {
     system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
     contents: history,
     tools: [{ google_search: {} }],
     safetySettings: SAFETY_SETTINGS,
     generationConfig: GENERATION_CONFIG,
   };
+}
 
-  let res;
+async function throwHttpError(res) {
+  let msg = "API error " + res.status;
+  try { msg = (await res.json()).error?.message || msg; } catch (_) {}
+  if (res.status === 429) msg = "Rate limit reached — wait a few seconds and try again";
+  throw new Error(msg);
+}
+
+/**
+ * Ask Gemini. Tries the streaming endpoint first; if the network
+ * stalls or blocks SSE, automatically falls back to a single
+ * non-streaming call. onSentence(s) fires per complete sentence.
+ * Returns { fullText, blocked, sources, mode }.
+ */
+export async function askGeminiStream(apiKey, userText, onSentence) {
+  history.push({ role: "user", parts: [{ text: userText }] });
+  if (history.length > HISTORY_LIMIT) history = history.slice(-HISTORY_LIMIT);
+
+  let result;
   try {
-    res = await fetch(STREAM_URL(apiKey), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    result = await tryStreaming(apiKey, onSentence);
   } catch (err) {
-    history.pop(); // don't leak the failed turn into the next request
-    throw err;
+    const retriable = err.name === "AbortError" || err.name === "TypeError";
+    if (!retriable) { history.pop(); throw err; }
+    try {
+      result = await tryOnce(apiKey, onSentence);   // SSE-blocked networks
+    } catch (err2) {
+      history.pop();
+      throw new Error(err2.name === "AbortError"
+        ? "Request timed out — check your internet connection"
+        : (err2.message || String(err2)));
+    }
   }
 
-  if (!res.ok) {
+  if (result.blocked || !result.fullText.trim()) {
     history.pop();
-    if (res.status === 429) throw new Error("Rate limit reached — wait a few seconds and try again");
-    if (res.status === 400 || res.status === 403) throw new Error("API key invalid or quota exceeded");
-    throw new Error("API error " + res.status);
+    return { ...result, fullText: "", blocked: true };
   }
+  history.push({ role: "model", parts: [{ text: result.fullText }] });
+  return result;
+}
+
+async function tryStreaming(apiKey, onSentence) {
+  const res = await fetch(STREAM_URL(apiKey), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildBody()),
+    signal: timeoutSignal(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) await throwHttpError(res);
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let sseBuf = "";       // raw SSE lines
-  let textBuf = "";      // sentence assembly buffer
-  let fullText = "";
+  let sseBuf = "", textBuf = "", fullText = "";
   let blocked = false;
-  const sources = new Set();   // grounding citations (web page titles)
+  const sources = new Set();
 
   const handleChunk = (json) => {
     if (json.promptFeedback && json.promptFeedback.blockReason) { blocked = true; return; }
@@ -98,8 +149,7 @@ export async function askGeminiStream(apiKey, userText, onSentence) {
         if (g.web && g.web.title && sources.size < 3) sources.add(g.web.title);
       }
     }
-    const piece = (cand.content && cand.content.parts || [])
-      .map((p) => p.text || "").join("");
+    const piece = (cand.content && cand.content.parts || []).map((p) => p.text || "").join("");
     if (!piece) return;
     textBuf += cleanForSpeech(piece);
     const { sentences, rest } = drainSentences(textBuf);
@@ -112,26 +162,48 @@ export async function askGeminiStream(apiKey, userText, onSentence) {
     if (done) break;
     sseBuf += decoder.decode(value, { stream: true });
     const lines = sseBuf.split("\n");
-    sseBuf = lines.pop(); // keep incomplete line
+    sseBuf = lines.pop();
     for (const line of lines) {
       const t = line.trim();
       if (!t.startsWith("data:")) continue;
       const payload = t.slice(5).trim();
       if (!payload || payload === "[DONE]") continue;
-      try { handleChunk(JSON.parse(payload)); } catch (_) { /* partial JSON, ignore */ }
+      try { handleChunk(JSON.parse(payload)); } catch (_) {}
     }
     if (blocked) break;
   }
 
-  /* flush any trailing partial sentence */
   const tail = textBuf.trim();
   if (!blocked && tail) { fullText += (fullText ? " " : "") + tail; onSentence(tail); }
+  return { fullText, blocked, sources: [...sources], mode: "stream" };
+}
 
-  if (blocked || !fullText.trim()) {
-    history.pop();
-    return { fullText: "", blocked: true, sources: [] };
+async function tryOnce(apiKey, onSentence) {
+  const res = await fetch(ONCE_URL(apiKey), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(buildBody()),
+    signal: timeoutSignal(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) await throwHttpError(res);
+
+  const data = await res.json();
+  if (data.promptFeedback && data.promptFeedback.blockReason)
+    return { fullText: "", blocked: true, sources: [], mode: "once" };
+  const cand = data.candidates && data.candidates[0];
+  if (!cand || cand.finishReason === "SAFETY" || !cand.content)
+    return { fullText: "", blocked: true, sources: [], mode: "once" };
+
+  const sources = [];
+  const gm = cand.groundingMetadata;
+  if (gm && gm.groundingChunks) {
+    for (const g of gm.groundingChunks) {
+      if (g.web && g.web.title && sources.length < 3) sources.push(g.web.title);
+    }
   }
-
-  history.push({ role: "model", parts: [{ text: fullText }] });
-  return { fullText, blocked: false, sources: [...sources] };
+  let text = cleanForSpeech((cand.content.parts || []).map((p) => p.text || "").join(" ")).trim();
+  const { sentences, rest } = drainSentences(text + " ");
+  for (const s of sentences) onSentence(s);
+  if (rest.trim()) onSentence(rest.trim());
+  return { fullText: text, blocked: false, sources, mode: "once" };
 }

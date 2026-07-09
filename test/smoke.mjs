@@ -45,6 +45,8 @@ const chunk = (text, extra = {}) => ({
 
 let fetchCalls = 0;
 globalThis.fetch = async (url, opts) => {
+  // preflight connectivity GET — always succeed in tests
+  if (!opts || !opts.body) return { ok: true, json: async () => ({ models: [] }) };
   fetchCalls++;
   const body = JSON.parse(opts.body);
   // pipeline must send grounding tool + safety settings + system prompt
