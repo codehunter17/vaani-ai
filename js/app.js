@@ -23,7 +23,7 @@ let busy = false;
    the API key without ever committing it to the public repo.
    Example: https://yoursite.github.io/vaani-ai/#key=AIza...     */
 function keyFromUrl() {
-  const m = location.hash.match(/key=([^&\s]+)/);
+  const m = window.location.hash.match(/key=([^&\s]+)/);
   return m ? decodeURIComponent(m[1]) : "";
 }
 
