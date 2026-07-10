@@ -29,29 +29,34 @@ export async function startListening() {
   starting = true;
   lastError = null;
 
-  /* Pre-warm the microphone; we immediately release the stream —
-     recognition only needed the permission + audio route. */
+  /* Pre-warm the microphone ONLY when we still need the permission
+     prompt. When permission is already granted, acquiring and
+     releasing the stream right before rec.start() can steal the
+     audio route on Android — recognition then hears nothing. */
+  let permState = "prompt";
   try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop());
+    if (navigator.permissions && navigator.permissions.query) {
+      permState = (await navigator.permissions.query({ name: "microphone" })).state;
     }
-  } catch (err) {
-    starting = false;
-    let code =
-      err.name === "NotAllowedError" ? "not-allowed" :
-      err.name === "NotFoundError"   ? "audio-capture" :
-      err.name === "NotReadableError" ? "mic-busy" : (err.name || "mic-failed");
-    /* Distinguish WHERE the block is: browser site-setting vs OS */
-    if (code === "not-allowed" && navigator.permissions && navigator.permissions.query) {
-      try {
-        const p = await navigator.permissions.query({ name: "microphone" });
-        if (p.state === "denied") code = "not-allowed-site";
-        else if (p.state === "granted") code = "not-allowed-os";
-      } catch (_) {}
+  } catch (_) {}
+
+  if (permState !== "granted") {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+        await new Promise((r) => setTimeout(r, 300));   // let the mic route settle
+      }
+    } catch (err) {
+      starting = false;
+      let code =
+        err.name === "NotAllowedError" ? "not-allowed" :
+        err.name === "NotFoundError"   ? "audio-capture" :
+        err.name === "NotReadableError" ? "mic-busy" : (err.name || "mic-failed");
+      if (code === "not-allowed" && permState === "denied") code = "not-allowed-site";
+      callbacks.onError(code);
+      return;
     }
-    callbacks.onError(code);
-    return;
   }
 
   rec = new SR();
