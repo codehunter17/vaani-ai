@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>VaaniAI — Mic Diagnostic</title>
+<style>
+  body{background:#0B0E1A;color:#EDEDF2;font-family:system-ui,sans-serif;margin:0;padding:20px;line-height:1.5}
+  h1{font-size:1.1rem;margin:0 0 4px}
+  .sub{color:#9AA0B8;font-size:.8rem;margin-bottom:16px}
+  button{background:#F2A93B;border:0;color:#1A1204;font-weight:600;font-size:1rem;
+    padding:14px 20px;border-radius:12px;width:100%;margin:6px 0;font-family:inherit}
+  button.rec{background:#F06A6A;color:#fff}
+  #log{background:#12162A;border:1px solid #262D52;border-radius:12px;padding:12px;
+    margin-top:14px;font-family:ui-monospace,monospace;font-size:.76rem;white-space:pre-wrap;
+    max-height:55vh;overflow:auto}
+  .ok{color:#59D9A4}.bad{color:#F06A6A}.warn{color:#F2A93B}
+  #level{height:14px;background:#12162A;border:1px solid #262D52;border-radius:8px;overflow:hidden;margin:10px 0}
+  #bar{height:100%;width:0;background:#59D9A4;transition:width .05s}
+</style>
+</head>
+<body>
+<h1>VaaniAI — Mic Diagnostic</h1>
+<div class="sub">Run each test in order. Send a screenshot of the log.</div>
+
+<button id="b1">1 · Check browser support</button>
+<button id="b2">2 · Request mic permission</button>
+<button id="b3">3 · Test live audio level (speak!)</button>
+<div id="level"><div id="bar"></div></div>
+<button id="b4">4 · Test speech recognition (speak!)</button>
+<button id="b5">5 · Test recording (5s, speak!)</button>
+
+<div id="log">Ready.</div>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg, cls){
+  const t = new Date().toLocaleTimeString();
+  logEl.innerHTML += `\n<span class="${cls||''}">[${t}] ${msg}</span>`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// 1. support
+document.getElementById('b1').onclick = async () => {
+  log('--- SUPPORT ---');
+  log('UA: ' + navigator.userAgent.slice(0,90));
+  log('secure context (https): ' + window.isSecureContext, window.isSecureContext?'ok':'bad');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  log('SpeechRecognition: ' + (SR ? 'yes' : 'NO'), SR?'ok':'bad');
+  log('MediaRecorder: ' + (window.MediaRecorder ? 'yes' : 'NO'), window.MediaRecorder?'ok':'bad');
+  log('getUserMedia: ' + (navigator.mediaDevices?.getUserMedia ? 'yes' : 'NO'), navigator.mediaDevices?.getUserMedia?'ok':'bad');
+  try {
+    const p = await navigator.permissions.query({name:'microphone'});
+    log('mic permission state: ' + p.state, p.state==='granted'?'ok':(p.state==='denied'?'bad':'warn'));
+  } catch(e){ log('permissions API unavailable: ' + e.name, 'warn'); }
+};
+
+// 2. permission
+document.getElementById('b2').onclick = async () => {
+  log('--- PERMISSION ---');
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({audio:true});
+    const tr = s.getAudioTracks()[0];
+    log('granted. track: ' + tr.label, 'ok');
+    log('track enabled=' + tr.enabled + ' muted=' + tr.muted + ' state=' + tr.readyState, tr.muted?'bad':'ok');
+    if (tr.muted) log('TRACK IS MUTED — the OS is muting the mic!', 'bad');
+    s.getTracks().forEach(t=>t.stop());
+  } catch(e){ log('FAILED: ' + e.name + ' — ' + e.message, 'bad'); }
+};
+
+// 3. live level meter
+document.getElementById('b3').onclick = async () => {
+  log('--- AUDIO LEVEL (10s) — speak loudly ---');
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({audio:true});
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ac = new AC(); await ac.resume();
+    const src = ac.createMediaStreamSource(s);
+    const an = ac.createAnalyser(); an.fftSize = 512;
+    src.connect(an);
+    const data = new Uint8Array(an.fftSize);
+    let peak = 0;
+    const bar = document.getElementById('bar');
+    const iv = setInterval(() => {
+      an.getByteTimeDomainData(data);
+      let m = 0;
+      for (const v of data) m = Math.max(m, Math.abs(v - 128) / 128);
+      peak = Math.max(peak, m);
+      bar.style.width = Math.min(100, m * 300) + '%';
+    }, 50);
+    setTimeout(() => {
+      clearInterval(iv); bar.style.width = '0';
+      s.getTracks().forEach(t=>t.stop()); ac.close();
+      log('peak level: ' + peak.toFixed(3), peak > 0.02 ? 'ok' : 'bad');
+      log(peak > 0.02 ? 'MIC HEARS YOU — hardware is fine.' : 'MIC IS SILENT — no audio reaching the browser.', peak>0.02?'ok':'bad');
+    }, 10000);
+  } catch(e){ log('FAILED: ' + e.name, 'bad'); }
+};
+
+// 4. speech recognition
+document.getElementById('b4').onclick = () => {
+  log('--- SPEECH RECOGNITION ---');
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return log('not supported', 'bad');
+  const r = new SR();
+  r.lang = 'en-IN'; r.interimResults = true; r.continuous = false;
+  const t0 = Date.now();
+  r.onstart = () => log('onstart fired — speak now', 'ok');
+  r.onaudiostart = () => log('onaudiostart (mic open)', 'ok');
+  r.onsoundstart = () => log('onsoundstart (SOUND DETECTED)', 'ok');
+  r.onspeechstart = () => log('onspeechstart (SPEECH DETECTED)', 'ok');
+  r.onresult = (e) => {
+    for (const res of e.results) log((res.isFinal?'FINAL: ':'interim: ') + res[0].transcript, 'ok');
+  };
+  r.onerror = (e) => log('onerror: ' + e.error, 'bad');
+  r.onend = () => log('onend after ' + ((Date.now()-t0)/1000).toFixed(1) + 's', 'warn');
+  try { r.start(); } catch(e){ log('start threw: ' + e.name, 'bad'); }
+};
+
+// 5. recording
+document.getElementById('b5').onclick = async () => {
+  log('--- RECORDING (5s) — speak now ---');
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({audio:true});
+    const mr = new MediaRecorder(s);
+    const chunks = [];
+    mr.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+    mr.onstop = async () => {
+      s.getTracks().forEach(t=>t.stop());
+      const blob = new Blob(chunks, {type: mr.mimeType});
+      log('recorded ' + blob.size + ' bytes, type=' + mr.mimeType, blob.size>2000?'ok':'bad');
+      try {
+        const ac = new (window.AudioContext||window.webkitAudioContext)();
+        const dec = await ac.decodeAudioData(await blob.arrayBuffer());
+        const ch = dec.getChannelData(0);
+        let peak = 0; for (let i=0;i<ch.length;i+=16) peak = Math.max(peak, Math.abs(ch[i]));
+        ac.close();
+        log('duration ' + dec.duration.toFixed(1) + 's, peak amplitude ' + peak.toFixed(4), peak>0.01?'ok':'bad');
+        log(peak > 0.01 ? 'AUDIO CAPTURED SUCCESSFULLY' : 'RECORDING IS SILENT', peak>0.01?'ok':'bad');
+      } catch(e){ log('decode failed: ' + e.message, 'bad'); }
+    };
+    mr.start();
+    log('recording...', 'warn');
+    setTimeout(() => mr.stop(), 5000);
+  } catch(e){ log('FAILED: ' + e.name, 'bad'); }
+};
+</script>
+</body>
+</html>
