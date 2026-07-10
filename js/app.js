@@ -8,8 +8,15 @@ import { HARDCODED_API_KEY } from "./config.js";
 import { violatesInputGuardrail, violatesOutputGuardrail, REFUSAL_LINE } from "./guardrails.js";
 import { setState, initVRMAvatar } from "./avatar.js";
 import { initSTT, startListening, stopListening, isListening, sttSupported } from "./stt.js";
+import { recSupported, startRecording, stopRecording, isRecording } from "./recorder.js";
 import { beginUtterance, enqueue, endOfStream, cancelSpeech, isSpeaking } from "./tts.js";
-import { askGeminiStream, preflight } from "./llm.js";
+import { askGeminiStream, preflight, transcribe } from "./llm.js";
+
+/* Voice strategy: native speech recognition first; if it fails to
+   deliver results (broken speech service on some phones), switch
+   to record-and-transcribe via Gemini — works on any device. */
+let voiceMode = sttSupported ? "sr" : (recSupported ? "rec" : "none");
+let recTimer = null;
 
 const $ = (id) => document.getElementById(id);
 const status_ = $("status"), micBtn = $("micBtn"), log = $("log"),
@@ -45,11 +52,13 @@ function addBubble(text, who, blocked) {
 function enableApp() {
   $("keybar").classList.add("hidden");
   $("keynote").classList.add("hidden");
-  micBtn.disabled = !sttSupported;
+  micBtn.disabled = voiceMode === "none";
   askInput.disabled = false;
   askSend.disabled = false;
-  if (!sttSupported) {
-    michint.textContent = "Voice needs Chrome or Edge — typed questions work below";
+  if (voiceMode === "none") {
+    michint.textContent = "Voice not available on this browser — typed questions work below";
+  } else if (voiceMode === "rec") {
+    michint.textContent = "Tap to record, tap again when done";
   }
   setState("idle");
   setStatus('Tap the mic or a suggestion — try "what is the weather in Hyderabad"');
@@ -116,17 +125,60 @@ initSTT({
     /* the mic closed without hearing anything and without a mapped
        error — say so instead of leaving a stale "Listening…" */
     if (!micGotResult && !reason && !busy) {
-      setStatus("Mic closed without capturing audio — if this repeats, check Android Settings → Apps → Chrome → Permissions → Microphone, and the mic toggle in Quick Settings", "err");
+      if (recSupported) {
+        voiceMode = "rec";
+        michint.textContent = "Tap to record, tap again when done";
+        setStatus("Speech service didn't respond — switched to recording mode. Tap the mic, speak, then tap again.", "");
+      } else {
+        setStatus("Mic closed without capturing audio — check the mic toggle in Quick Settings and Chrome's permissions", "err");
+      }
     }
   },
 });
 
-micBtn.onclick = () => {
+micBtn.onclick = async () => {
   if (!apiKey || busy) return;
   if (isSpeaking()) stopAll();
+
+  if (voiceMode === "rec") {
+    if (isRecording()) { await finishRecording(); return; }
+    try {
+      await startRecording();
+      micBtn.classList.add("listening");
+      setState("listening");
+      setStatus("Recording… tap the mic again when done", "live");
+      recTimer = setTimeout(() => { if (isRecording()) finishRecording(); }, 15000);
+    } catch (err) {
+      setStatus(err.name === "NotAllowedError"
+        ? "Microphone blocked — tap the lock icon in the address bar → Permissions → Microphone → Allow, then reload"
+        : "Could not start recording: " + (err.message || err), "err");
+    }
+    return;
+  }
+
   if (isListening()) { stopListening(); return; }
   startListening();
 };
+
+async function finishRecording() {
+  clearTimeout(recTimer);
+  micBtn.classList.remove("listening");
+  setState("thinking");
+  setStatus("Transcribing…", "live");
+  try {
+    const b64 = await stopRecording();
+    const text = await transcribe(apiKey, b64);
+    if (text && text.length > 1) {
+      handleQuery(text);
+    } else {
+      setState("idle");
+      setStatus("Didn't catch any speech — tap the mic and try again");
+    }
+  } catch (err) {
+    setState("idle");
+    setStatus("Transcription failed: " + String(err.message || err).slice(0, 100), "err");
+  }
+}
 
 /* ---------------- typed fallback + chips ---------------- */
 function submitTyped() {

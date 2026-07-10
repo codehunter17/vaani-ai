@@ -207,3 +207,28 @@ async function tryOnce(apiKey, onSentence) {
   if (rest.trim()) onSentence(rest.trim());
   return { fullText: text, blocked: false, sources, mode: "once" };
 }
+
+/* Transcribe recorded audio with Gemini itself — used when the
+   device's native speech service fails. No history involvement. */
+export async function transcribe(apiKey, base64Wav) {
+  const res = await fetch(ONCE_URL(apiKey), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{
+        role: "user",
+        parts: [
+          { inline_data: { mime_type: "audio/wav", data: base64Wav } },
+          { text: "Transcribe this audio exactly as spoken. It may be English, Hindi, or Hinglish. Output ONLY the transcription text, nothing else. If there is no speech, output nothing." },
+        ],
+      }],
+      generationConfig: { temperature: 0, maxOutputTokens: 256 },
+    }),
+    signal: timeoutSignal(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) await throwHttpError(res);
+  const data = await res.json();
+  const cand = data.candidates && data.candidates[0];
+  return ((cand && cand.content && cand.content.parts) || [])
+    .map((p) => p.text || "").join(" ").trim();
+}
