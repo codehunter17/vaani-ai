@@ -82,3 +82,33 @@ function encodeWavBase64(samples, rate) {
   }
   return btoa(bin);
 }
+
+/* Auto-stop helper: calls back after ~1.6 s of silence following
+   speech, so the user doesn't have to tap the mic a second time. */
+export function watchSilence(onSilence) {
+  if (!stream) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ac = new AC();
+  const src = ac.createMediaStreamSource(stream);
+  const an = ac.createAnalyser();
+  an.fftSize = 512;
+  src.connect(an);
+  const data = new Uint8Array(an.fftSize);
+  let heardSpeech = false, quietSince = 0, done = false;
+
+  const iv = setInterval(() => {
+    if (done || !isRecording()) { clearInterval(iv); try { ac.close(); } catch (_) {} return; }
+    an.getByteTimeDomainData(data);
+    let peak = 0;
+    for (const v of data) peak = Math.max(peak, Math.abs(v - 128) / 128);
+
+    if (peak > 0.04) { heardSpeech = true; quietSince = 0; return; }
+    if (!heardSpeech) return;
+    if (!quietSince) quietSince = Date.now();
+    else if (Date.now() - quietSince > 1600) {
+      done = true; clearInterval(iv);
+      try { ac.close(); } catch (_) {}
+      onSilence();
+    }
+  }, 100);
+}

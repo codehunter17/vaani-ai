@@ -8,14 +8,19 @@ import { HARDCODED_API_KEY } from "./config.js";
 import { violatesInputGuardrail, violatesOutputGuardrail, REFUSAL_LINE } from "./guardrails.js";
 import { setState, initVRMAvatar } from "./avatar.js";
 import { initSTT, startListening, stopListening, isListening, sttSupported } from "./stt.js";
-import { recSupported, startRecording, stopRecording, isRecording } from "./recorder.js";
+import { recSupported, startRecording, stopRecording, isRecording, watchSilence } from "./recorder.js";
 import { beginUtterance, enqueue, endOfStream, cancelSpeech, isSpeaking } from "./tts.js";
 import { askGeminiStream, preflight, transcribe } from "./llm.js";
 
-/* Voice strategy: native speech recognition first; if it fails to
-   deliver results (broken speech service on some phones), switch
-   to record-and-transcribe via Gemini — works on any device. */
-let voiceMode = sttSupported ? "sr" : (recSupported ? "rec" : "none");
+/* Voice strategy: record-and-transcribe via Gemini is the DEFAULT.
+   The native Web Speech API is unreliable in the field — on many
+   Android devices it reports permission granted, then either throws
+   'not-allowed' or hangs forever without ever firing a sound event.
+   MediaRecorder + Gemini transcription works on every browser
+   (Android, iOS, Firefox, desktop) and needs no OS speech service.
+   Native recognition is kept as the fallback where recording is
+   unavailable. */
+let voiceMode = recSupported ? "rec" : (sttSupported ? "sr" : "none");
 let recTimer = null;
 
 const $ = (id) => document.getElementById(id);
@@ -58,7 +63,7 @@ function enableApp() {
   if (voiceMode === "none") {
     michint.textContent = "Voice not available on this browser — typed questions work below";
   } else if (voiceMode === "rec") {
-    michint.textContent = "Tap to record, tap again when done";
+    michint.textContent = "Tap the mic and speak";
   }
   setState("idle");
   setStatus('Tap the mic or a suggestion — try "what is the weather in Hyderabad"');
@@ -127,7 +132,7 @@ initSTT({
     if (!micGotResult && !reason && !busy) {
       if (recSupported) {
         voiceMode = "rec";
-        michint.textContent = "Tap to record, tap again when done";
+        michint.textContent = "Tap the mic and speak";
         setStatus("Speech service didn't respond — switched to recording mode. Tap the mic, speak, then tap again.", "");
       } else {
         setStatus("Mic closed without capturing audio — check the mic toggle in Quick Settings and Chrome's permissions", "err");
@@ -146,8 +151,9 @@ micBtn.onclick = async () => {
       await startRecording();
       micBtn.classList.add("listening");
       setState("listening");
-      setStatus("Recording… tap the mic again when done", "live");
+      setStatus("Recording… speak now, it stops on its own", "live");
       recTimer = setTimeout(() => { if (isRecording()) finishRecording(); }, 15000);
+      watchSilence(() => { if (isRecording()) finishRecording(); });
     } catch (err) {
       setStatus(err.name === "NotAllowedError"
         ? "Microphone blocked — tap the lock icon in the address bar → Permissions → Microphone → Allow, then reload"
