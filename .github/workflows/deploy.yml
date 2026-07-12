@@ -26,12 +26,19 @@ jobs:
       - name: Inject Gemini API key from repository secret
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DID_API_KEY: ${{ secrets.DID_API_KEY }}
         run: |
           if [ -n "$GEMINI_API_KEY" ]; then
             sed -i "s|HARDCODED_API_KEY = \"\"|HARDCODED_API_KEY = \"${GEMINI_API_KEY}\"|" js/config.js
-            echo "Key injected into js/config.js"
+            echo "Gemini key injected"
           else
             echo "No GEMINI_API_KEY secret set — deploying with runtime key input"
+          fi
+          if [ -n "$DID_API_KEY" ]; then
+            sed -i "s|DID_API_KEY = \"\"|DID_API_KEY = \"${DID_API_KEY}\"|" js/config.js
+            echo "D-ID key injected — photorealistic avatar enabled"
+          else
+            echo "No DID_API_KEY secret — 3D VRM avatar tier"
           fi
 
       - uses: actions/configure-pages@v4

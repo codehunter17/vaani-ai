@@ -11,6 +11,7 @@ import { initSTT, startListening, stopListening, isListening, sttSupported } fro
 import { recSupported, startRecording, stopRecording, isRecording, watchSilence } from "./recorder.js";
 import { beginUtterance, enqueue, endOfStream, cancelSpeech, isSpeaking } from "./tts.js";
 import { askGeminiStream, preflight, transcribe } from "./llm.js";
+import { photorealConfigured, initPhotoreal, photorealReady, photorealSpeak } from "./avatar-photoreal.js";
 
 /* Voice strategy: record-and-transcribe via Gemini is the DEFAULT.
    The native Web Speech API is unreliable in the field — on many
@@ -89,10 +90,21 @@ $("keySave").onclick = () => {
    instantly and stays if the model can't load. Open the app with
    #debug in the URL to see avatar-load errors on screen. */
 initVRMAvatar("assets/model.vrm").then((ok) => {
-  if (window.location.hash.includes("debug")) {
+  if (window.location.hash.includes("debug") && !photorealConfigured()) {
     setStatus(ok ? "3D avatar loaded" : "3D avatar failed — see console; vector fallback active", ok ? "live" : "err");
   }
 });
+
+/* Photorealistic tier: when a D-ID key is configured, a real human
+   face streams in over WebRTC and replaces the 3D avatar. */
+if (photorealConfigured()) {
+  setStatus("Connecting photorealistic avatar…", "live");
+  initPhotoreal().then((ok) => {
+    setStatus(ok
+      ? "Photorealistic avatar connected — tap the mic and ask anything"
+      : "Photoreal avatar failed to connect — using 3D avatar (check the D-ID key / trial credits)", ok ? "live" : "err");
+  });
+}
 
 const MIC_ERRORS = {
   "not-allowed": "Microphone blocked — tap the lock icon in the address bar → Permissions → Microphone → Allow, then reload",
@@ -252,7 +264,7 @@ async function handleQuery(text) {
       }
       botBubble.textContent += (botBubble.textContent ? " " : "") + sentence;
       botBubble.scrollIntoView({ behavior: "smooth", block: "end" });
-      enqueue(sentence);
+      if (!photorealReady()) enqueue(sentence);
     });
 
     if (result.blocked || !spokenAnything) {
@@ -266,7 +278,16 @@ async function handleQuery(text) {
         s.textContent = "Sources: " + result.sources.join(" · ");
         botBubble.appendChild(s);
       }
-      endOfStream();
+      if (photorealReady()) {
+        setState("speaking");
+        setStatus("Speaking…", "live");
+        const ok = await photorealSpeak(result.fullText);
+        if (!ok) { enqueue(result.fullText); }   // voice fallback if the stream hiccups
+        endOfStream();
+        if (ok) { setState("idle"); setStatus("Tap the mic to ask another question"); }
+      } else {
+        endOfStream();
+      }
     }
   } catch (err) {
     botBubble.remove();
