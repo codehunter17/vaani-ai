@@ -48,7 +48,7 @@ export const SAFETY_SETTINGS = [
 /* ---- Photorealistic avatar tier (D-ID Streams) ----
    Get a free 14-day trial key (no card) at https://studio.d-id.com
    → API Keys. ~10 minutes of streaming video on trial.
-   Leave "" to use the 3D VRM avatar instead. */
+   Leave "" for voice-only mode (no video avatar). */
 export const DID_API_KEY = "";
 export const DID_SOURCE_URL = "https://d-id-public-bucket.s3.us-west-2.amazonaws.com/alice.jpg";
 export const DID_VOICE = "en-IN-NeerjaNeural";

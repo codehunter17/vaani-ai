@@ -3,8 +3,8 @@
    Photorealistic avatar tier via D-ID Streams:
    a real human face, streamed over WebRTC, lip-syncing the
    assistant's answers in real time. Pure REST + WebRTC — no SDK.
-   Activated only when DID_API_KEY is set; otherwise the VRM 3D
-   avatar remains. Every failure falls back gracefully.
+   Activated only when DID_API_KEY is set; otherwise the app
+   runs in voice-only mode. Every failure falls back gracefully.
    ============================================================ */
 
 import { DID_API_KEY, DID_SOURCE_URL, DID_VOICE } from "./config.js";
@@ -66,17 +66,17 @@ export async function initPhotoreal() {
 }
 
 function attachVideo(stream) {
-  const disc = document.querySelector(".avatar-disc");
+  const frame = document.getElementById("videoFrame");
   if (!videoEl) {
     videoEl = document.createElement("video");
     videoEl.autoplay = true;
     videoEl.playsInline = true;
     videoEl.muted = false;
-    videoEl.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:50%";
   }
   videoEl.srcObject = stream;
-  disc.querySelectorAll("svg,canvas").forEach((el) => (el.style.display = "none"));
-  if (!videoEl.parentNode) disc.appendChild(videoEl);
+  const poster = document.getElementById("poster");
+  if (poster) poster.style.display = "none";
+  if (!videoEl.parentNode) frame.appendChild(videoEl);
 }
 
 /* Speak text through the photoreal face (D-ID does TTS + lip-sync). */

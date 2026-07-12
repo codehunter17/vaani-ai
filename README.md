@@ -74,7 +74,7 @@ No frameworks, no build step, no backend — plain ES modules on static hosting.
 | STT | MediaRecorder + Gemini transcription (default); Web Speech API (fallback) | Works on every browser and OS. The native Web Speech API proved unreliable in testing — on some Android builds it reports permission granted, then hangs without firing a sound event — so recording is the primary path |
 | LLM + live web | Gemini 2.5 Flash + Google Search grounding | One call does reasoning **and** real-time retrieval; fast Flash tier; free quota |
 | TTS | SpeechSynthesis (`en-IN` voice) | Instant first audio, no second network hop |
-| Avatar | VRM 3D head (three.js + three-vrm) with SVG fallback | Real humanoid model, lip-synced via its own 'aa' viseme blendshape, blinking + idle motion; vector fallback if WebGL/model unavailable |
+| Avatar | Photorealistic human video (D-ID Streams over WebRTC) | Real human face in a portrait video frame, speaking answers with accurate lip-sync in real time — like a video call; voice-only fallback if the stream is unavailable |
 
 ## What else is in the box
 

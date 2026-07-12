@@ -38,7 +38,7 @@ jobs:
             sed -i "s|DID_API_KEY = \"\"|DID_API_KEY = \"${DID_API_KEY}\"|" js/config.js
             echo "D-ID key injected — photorealistic avatar enabled"
           else
-            echo "No DID_API_KEY secret — 3D VRM avatar tier"
+            echo "No DID_API_KEY secret — voice-only mode (no video avatar)"
           fi
 
       - uses: actions/configure-pages@v4

@@ -6,7 +6,7 @@
 
 import { HARDCODED_API_KEY } from "./config.js";
 import { violatesInputGuardrail, violatesOutputGuardrail, REFUSAL_LINE } from "./guardrails.js";
-import { setState, initVRMAvatar } from "./avatar.js";
+import { setState } from "./ui-state.js";
 import { initSTT, startListening, stopListening, isListening, sttSupported } from "./stt.js";
 import { recSupported, startRecording, stopRecording, isRecording, watchSilence } from "./recorder.js";
 import { beginUtterance, enqueue, endOfStream, cancelSpeech, isSpeaking } from "./tts.js";
@@ -86,23 +86,15 @@ $("keySave").onclick = () => {
 };
 
 /* ---------------- STT wiring ---------------- */
-/* Load the 3D head in the background; the vector avatar shows
-   instantly and stays if the model can't load. Open the app with
-   #debug in the URL to see avatar-load errors on screen. */
-initVRMAvatar("assets/model.vrm").then((ok) => {
-  if (window.location.hash.includes("debug") && !photorealConfigured()) {
-    setStatus(ok ? "3D avatar loaded" : "3D avatar failed — see console; vector fallback active", ok ? "live" : "err");
-  }
-});
-
-/* Photorealistic tier: when a D-ID key is configured, a real human
-   face streams in over WebRTC and replaces the 3D avatar. */
+/* Photorealistic avatar: when a D-ID key is configured, a real human
+   face streams into the portrait frame over WebRTC. Without a key
+   (or if the stream fails) the app runs in voice-only mode. */
 if (photorealConfigured()) {
   setStatus("Connecting photorealistic avatar…", "live");
   initPhotoreal().then((ok) => {
     setStatus(ok
       ? "Photorealistic avatar connected — tap the mic and ask anything"
-      : "Photoreal avatar failed to connect — using 3D avatar (check the D-ID key / trial credits)", ok ? "live" : "err");
+      : "Photoreal avatar failed to connect — voice-only mode (check the D-ID key / trial credits)", ok ? "live" : "err");
   });
 }
 

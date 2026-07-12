@@ -2,11 +2,11 @@
    VaaniAI · tts.js
    Text-to-speech with a SENTENCE QUEUE:
    the LLM stream pushes sentences here as they arrive, and the
-   avatar starts speaking sentence 1 while sentences 2..n are
+   assistant starts speaking sentence 1 while sentences 2..n are
    still being generated — this is the main latency win.
    ============================================================ */
 
-import { startTalking, stopTalking, wordBeat, setState } from "./avatar.js";
+import { setState } from "./ui-state.js";
 
 let queue = [];
 let speaking = false;
@@ -55,14 +55,12 @@ function speakNext() {
   }
   speaking = true;
   setState("speaking");
-  startTalking();
 
   const u = new SpeechSynthesisUtterance(s);
   const v = pickVoice();
   if (v) u.voice = v;
   u.rate = 1.0;
   u.pitch = 1.05;
-  u.onboundary = wordBeat;
   u.onend = () => { speaking = false; speakNext(); };
   u.onerror = () => { speaking = false; speakNext(); };
   speechSynthesis.speak(u);
@@ -70,7 +68,6 @@ function speakNext() {
 
 function finish() {
   speaking = false;
-  stopTalking();
   setState("idle");
   if (onAllDone) { const cb = onAllDone; onAllDone = null; cb(); }
 }
@@ -80,7 +77,6 @@ export function cancelSpeech() {
   streamDone = true;
   speechSynthesis.cancel();
   speaking = false;
-  stopTalking();
 }
 
 /* Chrome loads voices asynchronously */
